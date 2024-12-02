@@ -1,0 +1,40 @@
+{
+    "@context": [
+        "https://www.w3.org/2018/credentials/v1",
+        {
+            "credentialSchema": {
+                "@id": "https://www.w3.org/2018/credentials#credentialSchema",
+                "@type": "@id"
+            },
+            "email": {
+                "@id": "schema-id:email",
+                "@type": "https://schema.org/Text"
+            },
+            "fullName": {
+                "@id": "schema-id:fullName",
+                "@type": "https://schema.org/Text"
+            },
+            "courseName": {
+                "@id": "schema-id:courseName",
+                "@type": "https://schema.org/Text"
+            },
+            "instituteName": {
+                "@id": "schema-id:instituteName",
+                "@type": "https://schema.org/Text"
+            },
+            "instituteLogo": {
+                "@id": "schema-id:instituteLogo",
+                "@type": "https://schema.org/Text"
+            },
+            "dateOfCompletion": {
+                "@id": "schema-id:dateOfCompletion",
+                "@type": "https://schema.org/Text"
+            },
+            "scoreAchieved": {
+                "@id": "schema-id:score",
+                "@type": "https://schema.org/Text"
+            }
+        }
+    ],
+    "type": ["VerifiableCredential"]
+}

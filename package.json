@@ -32,14 +32,23 @@
     "license": "Apache v2.0",
     "homepage": "https://github.com/dhiway/cord.js#readme",
     "devDependencies": {
+        "@types/express": "^5.0.0",
         "@types/jsonabc": "^2.3.3",
+        "@types/node": "^22.7.3",
+        "@types/uuid": "^10.0.0",
         "dotenv": "^16.3.1",
         "jsonabc": "^2.3.1",
-        "prettier": "3.2.5",
-        "typescript": "^4.8.3"
+        "prettier": "^3.4.1",
+        "typescript": "^5.6.2"
     },
     "dependencies": {
-        "@cord.network/sdk": "0.9.3-1rc20",
-        "moment": "^2.29.4"
+        "@affinidi/tiny-lds-ecdsa-secp256k1-2019": "^1.2.2",
+        "@cord.network/sdk": "0.9.1-1rc18",
+        "bs58": "^6.0.0",
+        "ethereum-cryptography": "^3.0.0",
+        "express": "^4.21.1",
+        "jsonld": "^8.3.2",
+        "moment": "^2.29.4",
+        "ts-node": "^10.9.1"
     }
 }

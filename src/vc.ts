@@ -34,6 +34,48 @@ import {
 } from './types';
 
 import { hashContents, calculateVCHash } from './utils';
+import { signCredential } from './affinidi';
+
+const vcTemplate: any = {
+    '@context': [
+        'https://www.w3.org/2018/credentials/v1',
+        {
+            credentialSchema: {
+                '@id': 'https://www.w3.org/2018/credentials#credentialSchema',
+                '@type': '@id',
+            },
+            email: {
+                '@id': 'schema-id:email',
+                '@type': 'https://schema.org/Text',
+            },
+            fullName: {
+                '@id': 'schema-id:fullName',
+                '@type': 'https://schema.org/Text',
+            },
+            courseName: {
+                '@id': 'schema-id:courseName',
+                '@type': 'https://schema.org/Text',
+            },
+            instituteName: {
+                '@id': 'schema-id:instituteName',
+                '@type': 'https://schema.org/Text',
+            },
+            instituteLogo: {
+                '@id': 'schema-id:instituteLogo',
+                '@type': 'https://schema.org/Text',
+            },
+            dateOfCompletion: {
+                '@id': 'schema-id:dateOfCompletion',
+                '@type': 'https://schema.org/Text',
+            },
+            scoreAchieved: {
+                '@id': 'schema-id:score',
+                '@type': 'https://schema.org/Text',
+            },
+        },
+    ],
+    type: ['VerifiableCredential'],
+};
 
 export function getUriForStatement(
     digest: HexString,
@@ -112,7 +154,7 @@ export async function addProof(
     const now = dayjs();
     let credHash: Cord.HexString = calculateVCHash(vc, undefined);
     let genesisHash: string = await Cord.getGenesisHash(network);
-    
+
     /* TODO: Bring selective disclosure here */
     let proof2: CordSDRProof2024 | undefined = undefined;
     if (options.needSDR) {
@@ -171,7 +213,7 @@ export async function addProof(
             creatorUri: issuerDid.uri,
             digest: vc.credentialHash,
             identifier: `${elem[0]}:${elem[1]}:${elem[2]}`,
-            genesisHash: genesisHash
+            genesisHash: genesisHash,
         };
 
         vc.id = proof1.identifier;
@@ -313,6 +355,134 @@ export function buildVcFromContent(
     vc.credentialHash = calculateVCHash(vc, undefined);
 
     return vc as VerifiableCredential;
+}
+
+export async function buildAffinidiVcFromContent(
+    schema: any,
+    contents: any,
+    issuer: any,
+    holder: any,
+    options: any,
+) {
+    // Cord.Schema.verifyObjectAgainstSchema(contents, schema);
+
+    const { evidenceIds, validUntil, templates, labels } = options;
+
+    const now = new Date();
+    const issuanceDate = now.toISOString();
+    const expirationDate = validUntil
+        ? validUntil.toISOString()
+        : new Date(new Date().setFullYear(now.getFullYear() + 1)).toISOString();
+
+    const credentialSubject = {
+        ...contents,
+    };
+    let vc: any = {
+        ...vcTemplate,
+        // '@context': [
+        //     'https://www.w3.org/2018/credentials/v1',
+        //     'https://cord.network/2023/cred/v1',
+        // ],
+        // type: ['VerifiableCredential'],
+        holder: { id: holder.did },
+        credentialSubject,
+        // credentialSchema: {
+        //     '@id': 'https://www.w3.org/2018/credentials#credentialSchema',
+        //     '@type': '@id',
+        //   },
+        issuanceDate: issuanceDate,
+        expirationDate: expirationDate,
+        issuer: issuer.did,
+        // credentialSchema: schema,
+    };
+    vc.credentialHash = calculateVCHash(vc, undefined);
+
+    return vc as VerifiableCredential;
+}
+
+export async function addEcdsaSecp256k1Proof(
+    vc: VerifiableCredential,
+    key: any,
+    callbackFn: SignCallback,
+    issuerDid: Cord.DidDocument,
+    network: ApiPromise,
+    options: any,
+) {
+    let credHash: Cord.HexString = calculateVCHash(vc, undefined);
+    let genesisHash: string = await Cord.getGenesisHash(network);
+
+    /* TODO: Bring selective disclosure here */
+    let proof2: CordSDRProof2024 | undefined = undefined;
+    if (options.needSDR) {
+        let contents = { ...vc.credentialSubject };
+        // delete contents.id;
+
+        let hashes = hashContents(contents, options.schemaUri);
+
+        /* proof 2 - ConentNonces for selective disclosure */
+        /* This will enable the selective disclosure. This may not be compatible with the normal VC */
+        /* This also would change the 'credentialSubject' */
+        proof2 = {
+            type: 'CordSDRProof2024',
+            defaultDigest: credHash,
+            hashes: hashes.hashes,
+            nonceMap: hashes.nonceMap,
+            genesisHash: genesisHash,
+        };
+        // let vocabulary = `${options.schemaUri}#`;
+        // vc.credentialSubject['@context'] = { vocab: vocabulary };
+        credHash = calculateVCHash(vc, hashes.hashes);
+    }
+    vc.credentialHash = credHash;
+
+    /* proof 0 - Ed25519 */
+    /* validates ownership by checking the signature against the DID */
+
+    // let cbData = await callbackFn(vc.credentialHash);
+
+    // let proof0: ED25519Proof = {
+    //     type: 'Ed25519Signature2020',
+    //     created: now.toDate().toString(),
+    //     proofPurpose: cbData.keyType,
+    //     verificationMethod: cbData.keyUri,
+    //     proofValue: 'z' + base58Encode(cbData.signature),
+    //     challenge: undefined,
+    // };
+
+    let proof0 = await signCredential(vc, key);
+    console.log('proof0: ', proof0);
+
+    /* proof 1 - CordProof */
+    /* contains check for revoke */
+    let proof1: CordProof2024 | undefined = undefined;
+    if (options.needStatementProof) {
+        // SDK Method Name: Cord.statement.buildFromProperties //
+        const statementEntry = buildCordProof(
+            vc.credentialHash,
+            options.spaceUri!,
+            issuerDid.uri,
+            options.schemaUri ?? undefined,
+        );
+        let elem = statementEntry.elementUri.split(':');
+        proof1 = {
+            type: 'CordProof2024',
+            elementUri: statementEntry.elementUri,
+            spaceUri: statementEntry.spaceUri,
+            schemaUri: statementEntry.schemaUri,
+            creatorUri: issuerDid.uri,
+            digest: vc.credentialHash,
+            identifier: `${elem[0]}:${elem[1]}:${elem[2]}`,
+            genesisHash: genesisHash,
+        };
+
+        vc.id = proof1.identifier;
+    }
+
+    vc['proof'] = [proof0];
+    if (proof1) vc.proof.push(proof1);
+    if (proof2) vc.proof.push(proof2);
+
+    return vc;
 }
 
 export function updateVcFromContent(
