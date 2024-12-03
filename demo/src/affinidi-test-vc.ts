@@ -1,13 +1,11 @@
 import * as Cord from '@cord.network/sdk';
 import 'dotenv/config';
 
-import fs from 'fs';
-import crypto from 'crypto';
-
 import {
     addEcdsaSecp256k1Proof,
     addProof,
     buildAffinidiVcFromContent,
+    buildCordProof,
     buildVcFromContent,
     makePresentation,
     updateAddProof,
@@ -16,6 +14,7 @@ import {
 import { verifyVP, verifyVC, verifyProofElement } from '../../src/verifyUtils';
 import { getCordProofForDigest } from '../../src/docs';
 import { convertToDidKey, generateVC } from '../../src/affinidi';
+import { calculateAffinidiVCHash, calculateVCHash } from '../../src/utils';
 
 function getChallenge(): string {
     return Cord.Utils.UUID.generate();
@@ -147,7 +146,7 @@ async function main() {
     // );
 
     let newCredContent = await buildAffinidiVcFromContent(
-        '',
+        newSchemaContent,
         {
             email: 'amar@dhiway.com',
             fullName: 'Amar Tumballi',
@@ -164,13 +163,21 @@ async function main() {
         },
     );
 
-    console.log('newCredContentttt: ', newCredContent);
+    // Document hash anchor on chain
+    const credHash = calculateAffinidiVCHash(newCredContent, undefined);
+    const statementEntry = buildCordProof(
+        credHash,
+        space.uri,
+        issuerDid.uri,
+        undefined,
+    );
+    console.dir(credHash, { colors: true, depth: null });
 
-    let vc = await addEcdsaSecp256k1Proof(
+    // Add proof
+    let vcDoc = await addEcdsaSecp256k1Proof(
         newCredContent,
-        didIssuer.key,
         async (data) => ({
-            signature: await issuerKeys.assertionMethod.sign(data),
+            signature: issuerKeys.assertionMethod.sign(data),
             keyType: issuerKeys.assertionMethod.type,
             keyUri: `${issuerDid.uri}${
                 issuerDid.assertionMethod![0].id
@@ -179,10 +186,12 @@ async function main() {
         issuerDid,
         api,
         {
+            type: 'affinidi',
             spaceUri: space.uri,
             // schemaUri,
             needSDR: true,
             needStatementProof: true,
+            key: didIssuer.key,
         },
     );
 
@@ -204,14 +213,22 @@ async function main() {
     //         needStatementProof: true,
     //     },
     // );
-    
-    console.dir(vc, {
+
+    console.dir(vcDoc.vc, {
         depth: null,
         colors: true,
     });
 
+    let docHash;
+    if (vcDoc.options.type === 'affinidi') {
+        docHash = statementEntry;
+        console.log('in affinidi', docHash);
+    } else {
+        docHash = vcDoc.vc.proof[1];
+    }
+
     const statement = await Cord.Statement.dispatchRegisterToChain(
-        vc.proof[1],
+        docHash,
         issuerDid.uri,
         authorIdentity,
         space.authorization,
@@ -223,7 +240,7 @@ async function main() {
 
     console.log(`✅ Statement element registered - ${statement}`);
 
-    // await verifyVC(vc);
+    await verifyVC(vcDoc.vc);
 
     const holderKeys = Cord.Utils.Keys.generateKeypairs(
         holderMnemonic,
@@ -231,7 +248,7 @@ async function main() {
     );
 
     let vp = await makePresentation(
-        [vc],
+        [vcDoc.vc],
         holderDid,
         async (data) => ({
             signature: holderKeys.assertionMethod.sign(data),
@@ -250,31 +267,6 @@ async function main() {
     console.dir(vp, { colors: true, depth: null });
     /* VP verification would 'throw' an error in case of error */
     await verifyVP(vp);
-
-    /* sample for document hash anchor on CORD */
-    const content: any = fs.readFileSync('./package.json');
-    const hashFn = crypto.createHash('sha256');
-    hashFn.update(content);
-    let digest = `0x${hashFn.digest('hex')}`;
-
-    const docProof = await getCordProofForDigest(digest, issuerDid, api, {
-        spaceUri: space.uri,
-    });
-    const statement1 = await Cord.Statement.dispatchRegisterToChain(
-        docProof,
-        issuerDid.uri,
-        authorIdentity,
-        space.authorization,
-        async ({ data }) => ({
-            signature: issuerKeys.authentication.sign(data),
-            keyType: issuerKeys.authentication.type,
-        }),
-    );
-
-    console.dir(docProof, { colors: true, depth: null });
-    console.log(`✅ Statement element registered - ${statement1}`);
-
-    await verifyProofElement(docProof, digest, undefined);
 
     // Step:5 Update Verifiable credential
     console.log(`\n* Statement updation`);
@@ -298,12 +290,12 @@ async function main() {
                 },
             },
         },
-        vc,
+        vcDoc.vc,
         validUntil,
     );
 
     let updatedVc = await updateAddProof(
-        vc.proof[1].elementUri,
+        vcDoc.vc.proof[1].elementUri,
         updatedCredContent,
         async (data) => ({
             signature: await issuerKeys.assertionMethod.sign(data),
@@ -316,7 +308,7 @@ async function main() {
         api,
         {
             spaceUri: space.uri,
-            schemaUri,
+            // schemaUri,
             needSDR: true,
             needStatementProof: true,
         },

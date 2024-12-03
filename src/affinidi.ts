@@ -59,8 +59,8 @@ export async function signCredential(vc: any, key: any) {
         key,
         date: new Date().toISOString(),
     });
-    console.log('suite: ', suite);
-    console.log("vc: ", vc);
+
+    delete vc.credentialHash;
 
     /* this is used for signing */
     const signedDoc = await jsigs.sign(
@@ -84,7 +84,7 @@ export async function signCredential(vc: any, key: any) {
         },
     );
 
-    return signedDoc.proof;
+    return signedDoc;
 }
 
 export async function generateVC(content: any, holderDid: string) {

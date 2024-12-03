@@ -8,9 +8,38 @@ export function calculateVCHash(
     vc: VerifiableCredential,
     contentHashes: Cord.HexString[] | undefined,
 ): Cord.HexString {
+    const { issuanceDate, validFrom, validUntil, issuer, credentialSubject } =
+        vc;
+
+    let newCredContent: IContents = {
+        issuanceDate,
+        validFrom,
+        validUntil,
+        issuer,
+        credentialSubject,
+    };
+    if (contentHashes) {
+        newCredContent = {
+            issuanceDate,
+            validFrom,
+            validUntil,
+            issuer,
+            holder: credentialSubject.id,
+            contentHashes,
+        };
+    }
+    const serializedCred = Cord.Utils.Crypto.encodeObjectAsStr(newCredContent);
+    const credHash = Cord.Utils.Crypto.hashStr(serializedCred);
+
+    return credHash;
+}
+
+export function calculateAffinidiVCHash(
+    vc: VerifiableCredential,
+    contentHashes: Cord.HexString[] | undefined,
+): Cord.HexString {
     const { issuanceDate, expirationDate, issuer, credentialSubject, holder } =
         vc;
-    console.log('vccc: ', vc);
 
     let newCredContent: IContents = {
         issuanceDate,
@@ -29,7 +58,6 @@ export function calculateVCHash(
     }
     const serializedCred = Cord.Utils.Crypto.encodeObjectAsStr(newCredContent);
     const credHash = Cord.Utils.Crypto.hashStr(serializedCred);
-    console.log('credHashhhhhh: ', credHash);
     return credHash;
 }
 
