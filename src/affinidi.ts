@@ -8,6 +8,7 @@ import {
 import * as jsigs from 'jsonld-signatures';
 import { v4 as uuidv4 } from 'uuid';
 import { secp256k1 } from 'ethereum-cryptography/secp256k1.js';
+import { VerifiableCredential } from 'types';
 
 const mnemonic =
     'test walk nut penalty hip pave soap entry language right filter choice';
@@ -53,14 +54,12 @@ const vcTemplate: any = {
     type: ['VerifiableCredential'],
 };
 
-export async function signCredential(vc: any, key: any) {
+export async function signCredential(vc: VerifiableCredential, key: any) {
     /* suite is very important */
     const suite = new Secp256k1Signature({
         key,
         date: new Date().toISOString(),
     });
-
-    delete vc.credentialHash;
 
     /* this is used for signing */
     const signedDoc = await jsigs.sign(

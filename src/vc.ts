@@ -33,7 +33,11 @@ import {
     SignCallback,
 } from './types';
 
-import { hashContents, calculateVCHash } from './utils';
+import {
+    hashContents,
+    calculateVCHash,
+    calculateAffinidiVCHash,
+} from './utils';
 import { signCredential } from './affinidi';
 
 export function getUriForStatement(
@@ -360,17 +364,38 @@ export async function buildAffinidiVcFromContent(
     return vc as VerifiableCredential;
 }
 
-export async function addEcdsaSecp256k1Proof(
+export async function statementEntryToAnchorHash(
     vc: VerifiableCredential,
+    issuerDid: Cord.DidDocument,
+    options: any,
+) {
+    const credHash = calculateAffinidiVCHash(vc, undefined);
+
+    const statementEntry = buildCordProof(
+        credHash,
+        options.spaceUri,
+        issuerDid.uri,
+        undefined,
+    );
+    console.log('statementEntry: ', statementEntry);
+    return statementEntry;
+}
+
+export async function addEcdsaSecp256k1Proof(
+    vc: any,
     callbackFn: SignCallback,
     issuerDid: Cord.DidDocument,
     network: ApiPromise,
     options: any,
 ) {
     if (options.type === 'affinidi') {
+        delete vc.credentialHash;
+        // Add statement as id in VC
+        const vcId = options.statement.split(':').slice(0, 3).join(':');
+        vc.id = vcId;
+
         const signedVC = await signCredential(vc, options.key);
-        vc = signedVC;
-        return { vc, options };
+        return signedVC;
     } else {
         const now = dayjs();
         let credHash: Cord.HexString = calculateVCHash(vc, undefined);
@@ -443,11 +468,51 @@ export async function addEcdsaSecp256k1Proof(
         vc['proof'] = [proof0];
         if (proof1) vc.proof.push(proof1);
         if (proof2) vc.proof.push(proof2);
-        return { vc, options };
+
+        return vc;
     }
 }
 
-export function updateVcFromContent(
+export async function updateAffinidiVcFromContent(
+    contents: IContents,
+    vc: VerifiableCredential,
+    validUntil: string | undefined,
+) {
+    // Cord.Schema.verifyObjectAgainstSchema(
+    //     contents,
+    //     vc.credentialSchema as Cord.ISchema,
+    // );
+
+    const now = new Date();
+    const validFromString = now.toISOString();
+    const validUntilString = validUntil ? validUntil : vc.validUntil;
+
+    const credentialSubject = {
+        ...contents,
+        id: vc.credentialSubject.id,
+    };
+
+    let updatedVc: any = {
+        '@context': [
+            'https://www.w3.org/2018/credentials/v1',
+            'https://cord.network/2023/cred/v1',
+        ],
+        type: ['VerifiableCredential'],
+        issuer: vc.issuer,
+        issuanceDate: validFromString,
+        credentialSubject,
+        // validFrom: validFromString,
+        // validUntil: validUntilString,
+        metadata: vc.metadata,
+        credentialSchema: vc.credentialSchema,
+    };
+
+    updatedVc.credentialHash = calculateVCHash(updatedVc, undefined);
+
+    return updatedVc as VerifiableCredential;
+}
+
+export async function updateVcFromContent(
     contents: IContents,
     vc: VerifiableCredential,
     validUntil: string | undefined,

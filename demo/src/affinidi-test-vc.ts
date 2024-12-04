@@ -3,11 +3,9 @@ import 'dotenv/config';
 
 import {
     addEcdsaSecp256k1Proof,
-    addProof,
     buildAffinidiVcFromContent,
-    buildCordProof,
-    buildVcFromContent,
     makePresentation,
+    statementEntryToAnchorHash,
     updateAddProof,
     updateVcFromContent,
 } from '../../src/vc';
@@ -164,17 +162,30 @@ async function main() {
     );
 
     // Document hash anchor on chain
-    const credHash = calculateAffinidiVCHash(newCredContent, undefined);
-    const statementEntry = buildCordProof(
-        credHash,
-        space.uri,
-        issuerDid.uri,
-        undefined,
+    const statementEntry = await statementEntryToAnchorHash(
+        newCredContent,
+        issuerDid,
+        {
+            spaceUri: space.uri,
+        },
     );
-    console.dir(credHash, { colors: true, depth: null });
 
-    // Add proof
-    let vcDoc = await addEcdsaSecp256k1Proof(
+    // Anchor VC hash to chain
+    const statement = await Cord.Statement.dispatchRegisterToChain(
+        statementEntry,
+        issuerDid.uri,
+        authorIdentity,
+        space.authorization,
+        async ({ data }) => ({
+            signature: issuerKeys.authentication.sign(data),
+            keyType: issuerKeys.authentication.type,
+        }),
+    );
+
+    console.log(`✅ Statement element registered - ${statement}`);
+
+    // Add proof and sign
+    let vc = await addEcdsaSecp256k1Proof(
         newCredContent,
         async (data) => ({
             signature: issuerKeys.assertionMethod.sign(data),
@@ -189,6 +200,7 @@ async function main() {
             type: 'affinidi',
             spaceUri: space.uri,
             // schemaUri,
+            statement,
             needSDR: true,
             needStatementProof: true,
             key: didIssuer.key,
@@ -214,41 +226,20 @@ async function main() {
     //     },
     // );
 
-    console.dir(vcDoc.vc, {
-        depth: null,
-        colors: true,
-    });
+    console.log(JSON.stringify(vc, null, 2));
 
-    let docHash;
-    if (vcDoc.options.type === 'affinidi') {
-        docHash = statementEntry;
-        console.log('in affinidi', docHash);
-    } else {
-        docHash = vcDoc.vc.proof[1];
-    }
-
-    const statement = await Cord.Statement.dispatchRegisterToChain(
-        docHash,
-        issuerDid.uri,
-        authorIdentity,
-        space.authorization,
-        async ({ data }) => ({
-            signature: issuerKeys.authentication.sign(data),
-            keyType: issuerKeys.authentication.type,
-        }),
-    );
-
-    console.log(`✅ Statement element registered - ${statement}`);
-
-    await verifyVC(vcDoc.vc);
+    // Verify VC
+    await verifyVC(vc);
 
     const holderKeys = Cord.Utils.Keys.generateKeypairs(
         holderMnemonic,
         'sr25519',
     );
 
+    console.log(`\n* Generating VP.....`);
+
     let vp = await makePresentation(
-        [vcDoc.vc],
+        [vc],
         holderDid,
         async (data) => ({
             signature: holderKeys.assertionMethod.sign(data),
@@ -290,12 +281,12 @@ async function main() {
                 },
             },
         },
-        vcDoc.vc,
+        vc,
         validUntil,
     );
 
     let updatedVc = await updateAddProof(
-        vcDoc.vc.proof[1].elementUri,
+        vc.proof[1].elementUri,
         updatedCredContent,
         async (data) => ({
             signature: await issuerKeys.assertionMethod.sign(data),
