@@ -6,13 +6,11 @@ import {
     buildAffinidiVcFromContent,
     makePresentation,
     statementEntryToAnchorHash,
-    updateAddProof,
-    updateVcFromContent,
+    updateAffinidiVcFromContent,
+    updateEcdsaSecp256k1Proof,
 } from '../../src/vc';
-import { verifyVP, verifyVC, verifyProofElement } from '../../src/verifyUtils';
-import { getCordProofForDigest } from '../../src/docs';
-import { convertToDidKey, generateVC } from '../../src/affinidi';
-import { calculateAffinidiVCHash, calculateVCHash } from '../../src/utils';
+import { verifyVP, verifyVC } from '../../src/verifyUtils';
+import { convertToDidKey } from '../../src/affinidi';
 
 function getChallenge(): string {
     return Cord.Utils.UUID.generate();
@@ -146,8 +144,8 @@ async function main() {
     let newCredContent = await buildAffinidiVcFromContent(
         newSchemaContent,
         {
-            email: 'amar@dhiway.com',
-            fullName: 'Amar Tumballi',
+            email: 'alice@dhiway.com',
+            fullName: 'Alice',
             courseName: 'Masters in Data Analytics (Dhiway) ',
             instituteName: 'Hogwarts University',
             instituteLogo: '',
@@ -169,6 +167,7 @@ async function main() {
             spaceUri: space.uri,
         },
     );
+    console.log('statementEntry: ', statementEntry);
 
     // Anchor VC hash to chain
     const statement = await Cord.Statement.dispatchRegisterToChain(
@@ -188,7 +187,7 @@ async function main() {
     let vc = await addEcdsaSecp256k1Proof(
         newCredContent,
         async (data) => ({
-            signature: issuerKeys.assertionMethod.sign(data),
+            signature: await issuerKeys.assertionMethod.sign(data),
             keyType: issuerKeys.assertionMethod.type,
             keyUri: `${issuerDid.uri}${
                 issuerDid.assertionMethod![0].id
@@ -267,51 +266,35 @@ async function main() {
     oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
     const validUntil = oneMonthFromNow.toISOString();
 
-    let updatedCredContent = await updateVcFromContent(
+    let updatedCredContent = await updateAffinidiVcFromContent(
         {
-            name: 'Bob',
-            age: 30,
-            id: '362734238278237',
-            country: 'India',
-            address: {
-                street: 'a',
-                pin: 54032,
-                location: {
-                    state: 'karnataka',
-                },
-            },
+            email: 'bob@dhiway.com',
+            fullName: 'Bob',
+            courseName: 'Masters in Data Analytics (Dhiway) ',
+            instituteName: 'Hogwarts University',
+            instituteLogo: '',
+            dateOfCompletion: new Date().toISOString(),
+            scoreAchieved: '480/500',
         },
         vc,
         validUntil,
     );
 
-    let updatedVc = await updateAddProof(
-        vc.proof[1].elementUri,
+    // Document hash anchor on chain
+    const updatedStatementEntry = await statementEntryToAnchorHash(
         updatedCredContent,
-        async (data) => ({
-            signature: await issuerKeys.assertionMethod.sign(data),
-            keyType: issuerKeys.assertionMethod.type,
-            keyUri: `${issuerDid.uri}${
-                issuerDid.assertionMethod![0].id
-            }` as Cord.DidResourceUri,
-        }),
         issuerDid,
-        api,
         {
+            call: 'update',
             spaceUri: space.uri,
-            // schemaUri,
-            needSDR: true,
-            needStatementProof: true,
         },
+        statement,
     );
 
-    console.dir(updatedVc, {
-        depth: null,
-        colors: true,
-    });
+    console.log('updatedStatementEntry: ', updatedStatementEntry);
 
     const updatedStatement = await Cord.Statement.dispatchUpdateToChain(
-        updatedVc.proof[1],
+        updatedStatementEntry,
         issuerDid.uri,
         authorIdentity,
         space.authorization,
@@ -323,6 +306,34 @@ async function main() {
 
     console.log(`✅ UpdatedStatement element registered - ${updatedStatement}`);
 
+    let updatedVc = await updateEcdsaSecp256k1Proof(
+        updatedStatement,
+        updatedCredContent,
+        async (data) => ({
+            signature: await issuerKeys.assertionMethod.sign(data),
+            keyType: issuerKeys.assertionMethod.type,
+            keyUri: `${issuerDid.uri}${
+                issuerDid.assertionMethod![0].id
+            }` as Cord.DidResourceUri,
+        }),
+        issuerDid,
+        api,
+        {
+            type: 'affinidi',
+            spaceUri: space.uri,
+            // schemaUri,
+            needSDR: true,
+            needStatementProof: true,
+            key: didIssuer.key,
+        },
+    );
+
+    console.dir(updatedVc, {
+        depth: null,
+        colors: true,
+    });
+
+    // Verify VC
     await verifyVC(updatedVc);
 }
 

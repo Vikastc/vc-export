@@ -273,6 +273,100 @@ export async function updateAddProof(
     return vc;
 }
 
+export async function updateEcdsaSecp256k1Proof(
+    oldStmt: StatementUri,
+    vc: any,
+    callbackFn: SignCallback,
+    issuerDid: Cord.DidDocument,
+    network: ApiPromise,
+    options: any,
+) {
+    if (options.type === 'affinidi') {
+        delete vc.credentialHash;
+        // Add statement as id in VC
+        const vcId = oldStmt.split(':').slice(0, 3).join(':');
+        vc.id = vcId;
+
+        const signedVC = await signCredential(vc, options.key);
+        return signedVC;
+    } else {
+        const now = dayjs();
+        let credHash: Cord.HexString = calculateVCHash(vc, undefined);
+        let genesisHash: string = await Cord.getGenesisHash(network);
+
+        /* TODO: Bring selective disclosure here */
+        let proof2: CordSDRProof2024 | undefined = undefined;
+        if (options.needSDR) {
+            let contents = { ...vc.credentialSubject };
+            delete contents.id;
+
+            let hashes = hashContents(contents, options.schemaUri);
+
+            /* proof 2 - ConentNonces for selective disclosure */
+            /* This will enable the selective disclosure. This may not be compatible with the normal VC */
+            /* This also would change the 'credentialSubject' */
+            proof2 = {
+                type: 'CordSDRProof2024',
+                defaultDigest: credHash,
+                hashes: hashes.hashes,
+                nonceMap: hashes.nonceMap,
+                genesisHash: genesisHash,
+            };
+            let vocabulary = `${options.schemaUri}#`;
+            vc.credentialSubject['@context'] = { vocab: vocabulary };
+            credHash = calculateVCHash(vc, hashes.hashes);
+        }
+        vc.credentialHash = credHash;
+
+        /* proof 0 - Ed25519 */
+        /* validates ownership by checking the signature against the DID */
+
+        let cbData = await callbackFn(vc.credentialHash);
+
+        let proof0: ED25519Proof = {
+            type: 'Ed25519Signature2020',
+            created: now.toDate().toString(),
+            proofPurpose: cbData.keyType,
+            verificationMethod: cbData.keyUri,
+            proofValue: 'z' + base58Encode(cbData.signature),
+            challenge: undefined,
+        };
+
+        /* proof 1 - CordProof */
+        /* contains check for revoke */
+        let proof1: CordProof2024 | undefined = undefined;
+        if (options.needStatementProof) {
+            // SDK Method Name: Cord.statement.buildFromUpdateProperties //
+            const statementEntry = updateBuildCordProof(
+                oldStmt,
+                vc.credentialHash,
+                options.spaceUri!,
+                issuerDid.uri,
+                options.schemaUri ?? undefined,
+            );
+            let elem = statementEntry.elementUri.split(':');
+            proof1 = {
+                type: 'CordProof2024',
+                elementUri: statementEntry.elementUri,
+                spaceUri: statementEntry.spaceUri,
+                schemaUri: statementEntry.schemaUri,
+                creatorUri: issuerDid.uri,
+                digest: vc.credentialHash,
+                identifier: `${elem[0]}:${elem[1]}:${elem[2]}`,
+                genesisHash: genesisHash,
+            };
+
+            vc.id = proof1.identifier;
+        }
+
+        vc['proof'] = [proof0];
+        if (proof1) vc.proof.push(proof1);
+        if (proof2) vc.proof.push(proof2);
+
+        return vc;
+    }
+}
+
 export function buildVcFromContent(
     schema: Cord.ISchema,
     contents: IContents,
@@ -368,16 +462,28 @@ export async function statementEntryToAnchorHash(
     vc: VerifiableCredential,
     issuerDid: Cord.DidDocument,
     options: any,
+    statement?: any,
 ) {
     const credHash = calculateAffinidiVCHash(vc, undefined);
 
-    const statementEntry = buildCordProof(
-        credHash,
-        options.spaceUri,
-        issuerDid.uri,
-        undefined,
-    );
-    console.log('statementEntry: ', statementEntry);
+    let statementEntry;
+
+    if (options.call === 'update') {
+        statementEntry = updateBuildCordProof(
+            statement,
+            credHash,
+            options.spaceUri,
+            issuerDid.uri,
+            options.schemaUri ?? undefined,
+        );
+    } else {
+        statementEntry = buildCordProof(
+            credHash,
+            options.spaceUri,
+            issuerDid.uri,
+            undefined,
+        );
+    }
     return statementEntry;
 }
 
@@ -485,26 +591,30 @@ export async function updateAffinidiVcFromContent(
 
     const now = new Date();
     const validFromString = now.toISOString();
-    const validUntilString = validUntil ? validUntil : vc.validUntil;
+    const validUntilString = validUntil ? validUntil : vc.expirationDate;
 
     const credentialSubject = {
         ...contents,
-        id: vc.credentialSubject.id,
+        // id: vc.credentialSubject.id,
     };
 
+    const { '@context': context, type } = vc;
+
     let updatedVc: any = {
-        '@context': [
-            'https://www.w3.org/2018/credentials/v1',
-            'https://cord.network/2023/cred/v1',
-        ],
-        type: ['VerifiableCredential'],
+        '@context': context,
+        type,
+        // '@context': [
+        //     'https://www.w3.org/2018/credentials/v1',
+        //     'https://cord.network/2023/cred/v1',
+        // ],
+        // type: ['VerifiableCredential'],
+        holder: { id: vc.holder.id },
         issuer: vc.issuer,
         issuanceDate: validFromString,
+        expirationDate: validUntilString,
         credentialSubject,
         // validFrom: validFromString,
-        // validUntil: validUntilString,
-        metadata: vc.metadata,
-        credentialSchema: vc.credentialSchema,
+        // credentialSchema: vc.credentialSchema,
     };
 
     updatedVc.credentialHash = calculateVCHash(updatedVc, undefined);
