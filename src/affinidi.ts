@@ -1,5 +1,9 @@
 import express from 'express';
-import { mnemonicToMiniSecret } from '@polkadot/util-crypto';
+import {
+    ed25519PairFromSeed,
+    mnemonicToMiniSecret,
+} from '@polkadot/util-crypto';
+// import { Ed25519Signature2020 } from '@digitalbazaar/ed25519-signature-2020';
 import base58 from 'bs58';
 import {
     Secp256k1Key,
@@ -54,21 +58,56 @@ const vcTemplate: any = {
     type: ['VerifiableCredential'],
 };
 
-export async function signCredential(vc: VerifiableCredential, key: any) {
-    /* suite is very important */
-    const suite = new Secp256k1Signature({
-        key,
-        date: new Date().toISOString(),
-    });
+export async function signCredential(
+    vc: VerifiableCredential,
+    key: any,
+    type: string,
+) {
+    let signedDoc;
+    if (type === 'secp256k1') {
+        /* suite is very important */
+        const suite = new Secp256k1Signature({
+            key,
+            date: new Date().toISOString(),
+        });
 
-    /* this is used for signing */
-    const signedDoc = await jsigs.sign(
-        { ...vc },
-        {
+        console.log('in secp256k1', suite);
+        /* this is used for signing */
+        signedDoc = await jsigs.sign(
+            { ...vc },
+            {
+                suite,
+                documentLoader: async (url: any) => {
+                    if (url.startsWith('https://')) {
+                        /* does this always work? */
+                        const response = await fetch(url);
+                        const json = await response.json();
+                        return {
+                            contextUrl: null,
+                            document: json,
+                            documentUrl: url,
+                        };
+                    }
+                },
+                purpose: new jsigs.purposes.AssertionProofPurpose(),
+                compactProof: false,
+            },
+        );
+    } else if (type === 'ed25519') {
+        const suite = new Ed25519Signature2020({
+            key: key,
+            date: new Date().toISOString(), // Optional: Add timestamp for the proof
+        });
+
+        console.log('in ed25519: ', suite);
+
+        // Sign the Verifiable Credential
+        signedDoc = await jsigs.sign(vc, {
             suite,
+            purpose: new jsigs.purposes.AssertionProofPurpose(), // Ensures the proof serves the intended purpose
             documentLoader: async (url: any) => {
+                // Handle context fetching
                 if (url.startsWith('https://')) {
-                    /* does this always work? */
                     const response = await fetch(url);
                     const json = await response.json();
                     return {
@@ -78,10 +117,9 @@ export async function signCredential(vc: VerifiableCredential, key: any) {
                     };
                 }
             },
-            purpose: new jsigs.purposes.AssertionProofPurpose(),
-            compactProof: false,
-        },
-    );
+            compactProof: false, // Optional: Use true if compacting proofs is required
+        });
+    }
 
     return signedDoc;
 }
@@ -123,7 +161,7 @@ export async function generateVC(content: any, holderDid: string) {
 
     vc.issuer = did;
 
-    const signedVC = await signCredential(vc, key);
+    const signedVC = await signCredential(vc, key, "secp256k1");
     const wrappedVC = {
         credential: signedVC,
     };
@@ -177,23 +215,61 @@ export async function createVcForAffinidi(
     }
 }
 
-export async function convertToDidKey(mnemonic: string) {
+export async function convertToDidKey(
+    mnemonic: string,
+    type: 'secp256k1' | 'ed25519',
+) {
     const seed = mnemonicToMiniSecret(mnemonic);
-    const privateKey = seed.slice(0, 32);
-    const publicKey = secp256k1.getPublicKey(privateKey, true);
 
-    const multicodecPrefixedKey = new Uint8Array([0xe7, 0x01, ...publicKey]);
-    const encodedKey = base58.encode(multicodecPrefixedKey);
+    // Utility function to generate DID and verification method
+    const generateDidComponents = (
+        prefix: Uint8Array,
+        publicKey: Uint8Array,
+    ) => {
+        const multicodecPrefixedKey = new Uint8Array([...prefix, ...publicKey]);
+        const encodedKey = base58.encode(multicodecPrefixedKey);
+        const did = `did:key:z${encodedKey}`;
+        const verificationMethod = `${did}#z${encodedKey}`;
+        return { did, verificationMethod, encodedKey };
+    };
 
-    const verificationMethod = `did:key:z${encodedKey}#z${encodedKey}`;
-    const did = `did:key:z${encodedKey}`;
+    let key;
+    let did;
 
-    const key = new Secp256k1Key({
-        id: verificationMethod,
-        controller: did,
-        publicKeyHex: Buffer.from(publicKey).toString('hex'),
-        privateKeyHex: Buffer.from(privateKey).toString('hex'),
-    });
+    if (type === 'secp256k1') {
+        const privateKey = seed.slice(0, 32);
+        const publicKey = secp256k1.getPublicKey(privateKey, true);
+
+        const { did: secpDid, verificationMethod } = generateDidComponents(
+            new Uint8Array([0xe7, 0x01]),
+            publicKey,
+        );
+
+        key = new Secp256k1Key({
+            id: verificationMethod,
+            controller: secpDid,
+            publicKeyHex: Buffer.from(publicKey).toString('hex'),
+            privateKeyHex: Buffer.from(privateKey).toString('hex'),
+        });
+
+        did = secpDid;
+    } else if (type === 'ed25519') {
+        const { publicKey, secretKey: privateKey } = ed25519PairFromSeed(seed);
+
+        const { did: edDid, verificationMethod } = generateDidComponents(
+            new Uint8Array([0xed, 0x01]),
+            publicKey,
+        );
+
+        key = {
+            id: verificationMethod,
+            controller: edDid,
+            publicKeyHex: Buffer.from(publicKey).toString('hex'),
+            privateKeyHex: Buffer.from(privateKey).toString('hex'),
+        };
+
+        did = edDid;
+    }
 
     return { did, key };
 }

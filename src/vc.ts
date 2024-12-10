@@ -281,13 +281,13 @@ export async function updateEcdsaSecp256k1Proof(
     network: ApiPromise,
     options: any,
 ) {
-    if (options.type === 'affinidi') {
+    if (options.type) {
         delete vc.credentialHash;
         // Add statement as id in VC
         const vcId = oldStmt.split(':').slice(0, 3).join(':');
         vc.id = vcId;
 
-        const signedVC = await signCredential(vc, options.key);
+        const signedVC = await signCredential(vc, options.key, options.type);
         return signedVC;
     } else {
         const now = dayjs();
@@ -494,13 +494,13 @@ export async function addEcdsaSecp256k1Proof(
     network: ApiPromise,
     options: any,
 ) {
-    if (options.type === 'affinidi') {
+    if (options.type) {
         delete vc.credentialHash;
         // Add statement as id in VC
         const vcId = options.statement.split(':').slice(0, 3).join(':');
         vc.id = vcId;
 
-        const signedVC = await signCredential(vc, options.key);
+        const signedVC = await signCredential(vc, options.key, options.type);
         return signedVC;
     } else {
         const now = dayjs();

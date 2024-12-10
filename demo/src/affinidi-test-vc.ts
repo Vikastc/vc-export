@@ -53,11 +53,11 @@ async function main() {
     /*********************************************/
 
     // Issuer did:key converstion
-    const didIssuer = await convertToDidKey(issuerMnemonic);
+    const didIssuer = await convertToDidKey(issuerMnemonic, 'secp256k1');
     console.log('Issuer did: ', didIssuer);
 
     // Holder did:key converstion
-    const didHolder = await convertToDidKey(holderMnemonic);
+    const didHolder = await convertToDidKey(holderMnemonic, 'secp256k1');
     console.log('Holder did: ', didHolder);
 
     /*********************************************/
@@ -196,7 +196,7 @@ async function main() {
         issuerDid,
         api,
         {
-            type: 'affinidi',
+            type: 'secp256k1',
             spaceUri: space.uri,
             // schemaUri,
             statement,
@@ -319,7 +319,7 @@ async function main() {
         issuerDid,
         api,
         {
-            type: 'affinidi',
+            type: 'secp256k1',
             spaceUri: space.uri,
             // schemaUri,
             needSDR: true,
