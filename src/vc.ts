@@ -287,7 +287,7 @@ export async function updateEcdsaSecp256k1Proof(
         const vcId = oldStmt.split(':').slice(0, 3).join(':');
         vc.id = vcId;
 
-        const signedVC = await signCredential(vc, options.key, options.type);
+        const signedVC = await signCredential(vc, options.did, options.type);
         return signedVC;
     } else {
         const now = dayjs();
@@ -500,7 +500,7 @@ export async function addEcdsaSecp256k1Proof(
         const vcId = options.statement.split(':').slice(0, 3).join(':');
         vc.id = vcId;
 
-        const signedVC = await signCredential(vc, options.key, options.type);
+        const signedVC = await signCredential(vc, options.did, options.type);
         return signedVC;
     } else {
         const now = dayjs();

@@ -34,7 +34,7 @@
     "devDependencies": {
         "@types/express": "^5.0.0",
         "@types/jsonabc": "^2.3.3",
-        "@types/node": "^22.7.3",
+        "@types/node": "^22.10.5",
         "@types/uuid": "^10.0.0",
         "dotenv": "^16.3.1",
         "jsonabc": "^2.3.1",
@@ -42,12 +42,15 @@
         "typescript": "^5.6.2"
     },
     "dependencies": {
-        "@affinidi/tiny-lds-ecdsa-secp256k1-2019": "^1.2.2",
         "@cord.network/sdk": "0.9.1-1rc18",
+        "@digitalcredentials/ed25519-signature-2020": "^6.0.0",
+        "@digitalcredentials/ed25519-verification-key-2020": "^4.0.0",
+        "@transmute/did-key-ed25519": "^0.3.0-unstable.10",
         "bs58": "^6.0.0",
         "ethereum-cryptography": "^3.0.0",
         "express": "^4.21.1",
         "jsonld": "^8.3.2",
+        "jsonld-signatures": "^11.5.0",
         "moment": "^2.29.4",
         "ts-node": "^10.9.1"
     }
