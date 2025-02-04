@@ -3,14 +3,13 @@ import 'dotenv/config';
 
 import {
     addEd5519Proof,
-    buildAffinidiVcFromContent,
+    buildEd25519VcFromContent,
     makePresentation,
     statementEntryToAnchorHash,
-    updateAffinidiVcFromContent,
-    updateEcdsaSecp256k1Proof,
+    updateEd25519Proof,
+    updateEd25519VcFromContent,
 } from '../../src/vc';
-import { verifyVP, verifyVC } from '../../src/verifyUtils';
-import { convertToDidKey } from '../../src/affinidi';
+import { convertToDidKey } from '../../src/did-key';
 
 function getChallenge(): string {
     return Cord.Utils.UUID.generate();
@@ -53,11 +52,11 @@ async function main() {
     /*********************************************/
 
     // Issuer did:key converstion
-    const didIssuer = await convertToDidKey(issuerMnemonic, 'ed25519');
+    const didIssuer = await convertToDidKey(issuerMnemonic);
     console.log('Issuer did: ', didIssuer);
 
     // Holder did:key converstion
-    const didHolder = await convertToDidKey(holderMnemonic, 'ed25519');
+    const didHolder = await convertToDidKey(holderMnemonic);
     console.log('Holder did: ', didHolder);
 
     /*********************************************/
@@ -84,64 +83,12 @@ async function main() {
         }),
     );
 
-    console.log(`\n❄️  Chain Space Approval `);
-    await Cord.ChainSpace.sudoApproveChainSpace(authorIdentity, space.uri, 100);
-    console.log(`✅  Chain Space Approved`);
-
     /* schema */
-
     let newSchemaContent = require('./schema2.json');
-    // let newSchemaName =
-    //     newSchemaContent.title + ':' + Cord.Utils.UUID.generate();
-    // newSchemaContent.title = newSchemaName;
-    // console.log('newSchemaContent: ', newSchemaContent);
 
-    // let schemaProperties = Cord.Schema.buildFromProperties(
-    //     newSchemaContent,
-    //     space.uri,
-    //     issuerDid.uri,
-    // );
-
-    // console.log('schemaProperties: ', schemaProperties);
-    // const schemaUri = await Cord.Schema.dispatchToChain(
-    //     schemaProperties.schema,
-    //     issuerDid.uri,
-    //     authorIdentity,
-    //     space.authorization,
-    //     async ({ data }) => ({
-    //         signature: issuerKeys.authentication.sign(data),
-    //         keyType: issuerKeys.authentication.type,
-    //     }),
-    // );
-    // console.log(`✅ Schema - ${schemaUri} - added!`);
-
-    // Step 4: Delegate creates a new Verifiable Document
     console.log(`\n❄️  Statement Creation `);
 
-    // let newCredContent = await buildVcFromContent(
-    //     schemaProperties.schema,
-    //     {
-    //         name: 'Alice',
-    //         age: 29,
-    //         id: '123456789987654321',
-    //         country: 'India',
-    //         address: {
-    //             street: 'a',
-    //             pin: 54032,
-    //             location: {
-    //                 state: 'karnataka',
-    //             },
-    //         },
-    //     },
-    //     issuerDid,
-    //     holderDid.uri,
-    //     {
-    //         spaceUri: space.uri,
-    //         schemaUri: schemaUri,
-    //     },
-    // );
-
-    let newCredContent = await buildAffinidiVcFromContent(
+    let newCredContent = await buildEd25519VcFromContent(
         newSchemaContent,
         {
             email: 'alice@dhiway.com',
@@ -196,7 +143,7 @@ async function main() {
         issuerDid,
         api,
         {
-            type: 'ed25519',
+            type: 'Ed25519',
             spaceUri: space.uri,
             // schemaUri,
             statement,
@@ -205,25 +152,6 @@ async function main() {
             did: didIssuer?.did,
         },
     );
-
-    // let vc = await addProof(
-    //     newCredContent,
-    //     async (data) => ({
-    //         signature: await issuerKeys.assertionMethod.sign(data),
-    //         keyType: issuerKeys.assertionMethod.type,
-    //         keyUri: `${issuerDid.uri}${
-    //             issuerDid.assertionMethod![0].id
-    //         }` as Cord.DidResourceUri,
-    //     }),
-    //     issuerDid,
-    //     api,
-    //     {
-    //         spaceUri: space.uri,
-    //         schemaUri,
-    //         needSDR: true,
-    //         needStatementProof: true,
-    //     },
-    // );
 
     console.log(JSON.stringify(vc, null, 2));
 
@@ -266,7 +194,7 @@ async function main() {
     oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
     const validUntil = oneMonthFromNow.toISOString();
 
-    let updatedCredContent = await updateAffinidiVcFromContent(
+    let updatedCredContent = await updateEd25519VcFromContent(
         {
             email: 'bob@dhiway.com',
             fullName: 'Bob',
@@ -306,7 +234,7 @@ async function main() {
 
     console.log(`✅ UpdatedStatement element registered - ${updatedStatement}`);
 
-    let updatedVc = await updateEcdsaSecp256k1Proof(
+    let updatedVc = await updateEd25519Proof(
         updatedStatement,
         updatedCredContent,
         async (data) => ({
@@ -319,7 +247,7 @@ async function main() {
         issuerDid,
         api,
         {
-            type: 'ed25519',
+            type: 'Ed25519',
             spaceUri: space.uri,
             // schemaUri,
             needSDR: true,

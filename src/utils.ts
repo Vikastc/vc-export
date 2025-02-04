@@ -34,7 +34,7 @@ export function calculateVCHash(
     return credHash;
 }
 
-export function calculateAffinidiVCHash(
+export function calculateNewVCHash(
     vc: VerifiableCredential,
     contentHashes: Cord.HexString[] | undefined,
 ): Cord.HexString {

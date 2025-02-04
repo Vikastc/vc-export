@@ -59,7 +59,7 @@ const vcTemplate: any = {
     type: ['VerifiableCredential'],
 };
 
-export async function signCredential(
+async function signCredential(
     vc: VerifiableCredential,
     did: any,
     type: string,
@@ -130,7 +130,7 @@ export async function signCredential(
     }
 }
 
-export async function generateVC(content: any, holderDid: string) {
+async function generateVC(content: any, holderDid: string) {
     // let vc = { ...vcTemplate };
     // const seed = mnemonicToMiniSecret(mnemonic);
     // const privateKey = seed.slice(0, 32);
@@ -167,7 +167,7 @@ export async function generateVC(content: any, holderDid: string) {
     // return wrappedVC;
 }
 
-export async function createVcForAffinidi(
+async function createVcForAffinidi(
     req: express.Request,
     res: express.Response,
 ) {
@@ -212,7 +212,7 @@ export async function createVcForAffinidi(
     }
 }
 
-export async function convertToDidKey(
+async function convertToDidKey(
     mnemonic: string,
     type: 'secp256k1' | 'ed25519',
 ) {
