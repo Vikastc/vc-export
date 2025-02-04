@@ -32,11 +32,7 @@ import {
     SignCallback,
 } from './types';
 
-import {
-    hashContents,
-    calculateVCHash,
-    calculateNewVCHash,
-} from './utils';
+import { hashContents, calculateVCHash, calculateNewVCHash } from './utils';
 
 export function getUriForStatement(
     digest: HexString,
@@ -327,7 +323,7 @@ export async function buildEd25519VcFromContent(
 ) {
     // Cord.Schema.verifyObjectAgainstSchema(contents, schema);
 
-    const { evidenceIds, validUntil, templates, labels } = options;
+    const { validUntil } = options;
 
     const now = new Date();
     const issuanceDate = now.toISOString();
@@ -602,6 +598,7 @@ export async function signCredential(vc: VerifiableCredential, did: any) {
                             documentUrl: url,
                         };
                     }
+                    return {};
                 },
             });
         } catch (error) {
@@ -715,7 +712,7 @@ export async function makePresentation(
 
             if (options.selectedFields) {
                 let subject = vc.credentialSubject;
-                let newSubject = {
+                let newSubject: { [key: string]: any } = {
                     id: subject.id,
                     ['@context']: subject['@context'],
                 };
