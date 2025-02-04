@@ -2,7 +2,7 @@ import * as Cord from '@cord.network/sdk';
 import 'dotenv/config';
 
 import {
-    addEcdsaSecp256k1Proof,
+    addEd5519Proof,
     buildAffinidiVcFromContent,
     makePresentation,
     statementEntryToAnchorHash,
@@ -184,7 +184,7 @@ async function main() {
     console.log(`✅ Statement element registered - ${statement}`);
 
     // Add proof and sign
-    let vc = await addEcdsaSecp256k1Proof(
+    let vc = await addEd5519Proof(
         newCredContent,
         async (data) => ({
             signature: await issuerKeys.assertionMethod.sign(data),

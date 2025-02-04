@@ -487,7 +487,7 @@ export async function statementEntryToAnchorHash(
     return statementEntry;
 }
 
-export async function addEcdsaSecp256k1Proof(
+export async function addEd5519Proof(
     vc: any,
     callbackFn: SignCallback,
     issuerDid: Cord.DidDocument,
